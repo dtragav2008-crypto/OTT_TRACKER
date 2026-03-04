@@ -2,16 +2,12 @@ import express from 'express'
 import cors from 'cors'
 import mongoose from 'mongoose'
 import dotenv from 'dotenv'
-import { fileURLToPath } from 'url'
-import { dirname, join } from 'path'
 import dns from 'dns'
 
 dns.setServers(['8.8.8.8', '8.8.4.4'])
 
-// Load .env from server directory
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
-dotenv.config({ path: join(__dirname, '.env') })
+// Load .env from the root directory
+dotenv.config()
 
 import subscriptionRoutes from './routes/subscriptions.js'
 

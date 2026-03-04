@@ -1,15 +1,12 @@
 import mongoose from 'mongoose'
 import dotenv from 'dotenv'
-import { fileURLToPath } from 'url'
-import { dirname, join } from 'path'
 import Subscription from './models/Subscription.js'
 import dns from 'dns'
 
 dns.setServers(['8.8.8.8', '8.8.4.4'])
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
-dotenv.config({ path: join(__dirname, '.env') })
+// Load .env from root directory
+dotenv.config()
 
 const seedData = [
     {
