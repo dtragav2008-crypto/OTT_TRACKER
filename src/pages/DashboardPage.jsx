@@ -1,5 +1,7 @@
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { subscriptions, getDaysLeft, formatCurrency, stats } from '../data/mockData'
+import { getDaysLeft, formatCurrency, getStatusFromDays } from '../data/mockData'
+import { fetchSubscriptions } from '../utils/api'
 import {
     TrendingUp,
     AlertTriangle,
@@ -7,36 +9,8 @@ import {
     ListVideo,
     ArrowUpRight,
     ChevronRight,
+    Loader2
 } from 'lucide-react'
-
-const statCards = [
-    {
-        title: 'Total Subscriptions',
-        value: stats.totalSubscriptions,
-        icon: ListVideo,
-        change: '+2 this month',
-        color: 'from-accent/20 to-accent/5',
-        iconBg: 'bg-accent/15',
-    },
-    {
-        title: 'Expiring Soon',
-        value: stats.expiringSoon,
-        icon: AlertTriangle,
-        change: 'Within 15 days',
-        color: 'from-yellow-500/20 to-yellow-500/5',
-        iconBg: 'bg-yellow-500/15',
-        textColor: 'text-yellow-400',
-    },
-    {
-        title: 'Monthly Spend',
-        value: formatCurrency(stats.totalMonthlySpend),
-        icon: CreditCard,
-        change: '−₹500 vs last month',
-        color: 'from-green-500/20 to-green-500/5',
-        iconBg: 'bg-green-500/15',
-        textColor: 'text-green-400',
-    },
-]
 
 const container = {
     hidden: {},
@@ -62,6 +36,67 @@ const StatusBadge = ({ status }) => {
 }
 
 const DashboardPage = () => {
+    const [subscriptions, setSubscriptions] = useState([])
+    const [loading, setLoading] = useState(true)
+
+    useEffect(() => {
+        const loadData = async () => {
+            try {
+                const data = await fetchSubscriptions()
+                setSubscriptions(data)
+            } catch (err) {
+                console.error(err)
+            } finally {
+                setLoading(false)
+            }
+        }
+        loadData()
+    }, [])
+
+    const totalSubscriptions = subscriptions.length
+    const expiringSoon = subscriptions.filter(s => {
+        const d = getDaysLeft(s.expiryDate)
+        return d > 0 && d <= 15
+    }).length
+    const totalSpend = subscriptions.reduce((acc, sub) => acc + (sub.price || 0), 0)
+
+    const statCards = [
+        {
+            title: 'Total Subscriptions',
+            value: totalSubscriptions,
+            icon: ListVideo,
+            change: '+2 this month',
+            color: 'from-accent/20 to-accent/5',
+            iconBg: 'bg-accent/15',
+        },
+        {
+            title: 'Expiring Soon',
+            value: expiringSoon,
+            icon: AlertTriangle,
+            change: 'Within 15 days',
+            color: 'from-yellow-500/20 to-yellow-500/5',
+            iconBg: 'bg-yellow-500/15',
+            textColor: 'text-yellow-400',
+        },
+        {
+            title: 'Total Spend Value',
+            value: formatCurrency(totalSpend),
+            icon: CreditCard,
+            change: 'Overall active plans',
+            color: 'from-green-500/20 to-green-500/5',
+            iconBg: 'bg-green-500/15',
+            textColor: 'text-green-400',
+        },
+    ]
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center min-h-[50vh]">
+                <Loader2 className="w-8 h-8 text-accent animate-spin" />
+            </div>
+        )
+    }
+
     return (
         <motion.div
             variants={container}
@@ -116,9 +151,6 @@ const DashboardPage = () => {
                         <h2 className="text-base font-semibold">Active Subscriptions</h2>
                         <p className="text-xs text-gray-500 mt-0.5">All your OTT platform subscriptions</p>
                     </div>
-                    <button className="text-xs text-accent hover:text-accent-light font-medium flex items-center gap-1 transition-colors">
-                        View All <ChevronRight className="w-3.5 h-3.5" />
-                    </button>
                 </div>
 
                 {/* Desktop Table */}
@@ -135,11 +167,19 @@ const DashboardPage = () => {
                             </tr>
                         </thead>
                         <tbody>
+                            {subscriptions.length === 0 && (
+                                <tr>
+                                    <td colSpan="6" className="px-6 py-8 text-center text-gray-500 text-sm">
+                                        No active subscriptions found.
+                                    </td>
+                                </tr>
+                            )}
                             {subscriptions.map((sub, idx) => {
                                 const daysLeft = getDaysLeft(sub.expiryDate)
+                                const status = getStatusFromDays(daysLeft)
                                 return (
                                     <motion.tr
-                                        key={sub.id}
+                                        key={sub._id || idx}
                                         initial={{ opacity: 0, x: -10 }}
                                         animate={{ opacity: 1, x: 0 }}
                                         transition={{ delay: idx * 0.05 }}
@@ -149,9 +189,9 @@ const DashboardPage = () => {
                                             <div className="flex items-center gap-3">
                                                 <div
                                                     className="w-9 h-9 rounded-lg flex items-center justify-center text-base"
-                                                    style={{ backgroundColor: `${sub.color}20` }}
+                                                    style={{ backgroundColor: `${sub.color || '#FF2B2B'}20` }}
                                                 >
-                                                    {sub.icon}
+                                                    {sub.icon || '📺'}
                                                 </div>
                                                 <span className="font-medium text-sm">{sub.platform}</span>
                                             </div>
@@ -172,7 +212,7 @@ const DashboardPage = () => {
                                             </span>
                                         </td>
                                         <td className="px-4 py-4">
-                                            <StatusBadge status={sub.status} />
+                                            <StatusBadge status={status} />
                                         </td>
                                     </motion.tr>
                                 )
@@ -183,22 +223,28 @@ const DashboardPage = () => {
 
                 {/* Mobile Cards */}
                 <div className="md:hidden divide-y divide-white/5">
-                    {subscriptions.map((sub) => {
+                    {subscriptions.length === 0 && (
+                        <div className="p-6 text-center text-sm text-gray-500">
+                            No active subscriptions found.
+                        </div>
+                    )}
+                    {subscriptions.map((sub, idx) => {
                         const daysLeft = getDaysLeft(sub.expiryDate)
+                        const status = getStatusFromDays(daysLeft)
                         return (
-                            <div key={sub.id} className="px-5 py-4 flex items-center gap-4">
+                            <div key={sub._id || idx} className="px-5 py-4 flex items-center gap-4">
                                 <div
                                     className="w-11 h-11 rounded-xl flex items-center justify-center text-lg flex-shrink-0"
-                                    style={{ backgroundColor: `${sub.color}20` }}
+                                    style={{ backgroundColor: `${sub.color || '#FF2B2B'}20` }}
                                 >
-                                    {sub.icon}
+                                    {sub.icon || '📺'}
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <p className="font-semibold text-sm truncate">{sub.platform}</p>
                                     <p className="text-xs text-gray-500">{sub.plan} · {formatCurrency(sub.price)}</p>
                                 </div>
                                 <div className="text-right flex-shrink-0">
-                                    <StatusBadge status={sub.status} />
+                                    <StatusBadge status={status} />
                                     <p className={`text-[11px] font-medium mt-1 ${daysLeft <= 0 ? 'text-red-400' : daysLeft <= 15 ? 'text-yellow-400' : 'text-gray-500'
                                         }`}>
                                         {daysLeft <= 0 ? 'Expired' : `${daysLeft}d left`}

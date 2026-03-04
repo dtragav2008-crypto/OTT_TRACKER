@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
+import { createSubscription } from '../utils/api'
 import {
     Tv,
     CreditCard,
@@ -10,18 +11,19 @@ import {
     ArrowLeft,
     Check,
     ChevronDown,
+    Loader2
 } from 'lucide-react'
 
 const platforms = [
-    { name: 'Netflix', icon: '🎬', color: '#E50914' },
-    { name: 'Amazon Prime', icon: '📦', color: '#00A8E1' },
-    { name: 'Disney+ Hotstar', icon: '🏰', color: '#113CCF' },
-    { name: 'Spotify', icon: '🎵', color: '#1DB954' },
-    { name: 'YouTube Premium', icon: '▶️', color: '#FF0000' },
-    { name: 'HBO Max', icon: '🎭', color: '#B535F6' },
-    { name: 'Apple TV+', icon: '🍎', color: '#555' },
-    { name: 'JioCinema', icon: '🏏', color: '#0A3D92' },
-    { name: 'Other', icon: '📺', color: '#FF2B2B' },
+    { name: 'Netflix', icon: '🎬', color: '#E50914', url: 'https://www.netflix.com/signup' },
+    { name: 'Amazon Prime', icon: '📦', color: '#00A8E1', url: 'https://www.amazon.com/amazonprime' },
+    { name: 'Disney+ Hotstar', icon: '🏰', color: '#113CCF', url: 'https://www.hotstar.com/subscribe' },
+    { name: 'Spotify', icon: '🎵', color: '#1DB954', url: 'https://www.spotify.com/premium' },
+    { name: 'YouTube Premium', icon: '▶️', color: '#FF0000', url: 'https://www.youtube.com/premium' },
+    { name: 'HBO Max', icon: '🎭', color: '#B535F6', url: 'https://www.max.com/' },
+    { name: 'Apple TV+', icon: '🍎', color: '#555', url: 'https://tv.apple.com/' },
+    { name: 'JioCinema', icon: '🏏', color: '#0A3D92', url: 'https://www.jiocinema.com/premium' },
+    { name: 'Other', icon: '📺', color: '#FF2B2B', url: 'https://google.com/search?q=OTT+Subscription' },
 ]
 
 const planTypes = ['Basic', 'Standard', 'Premium', 'Family', 'Annual', 'Monthly', 'Duo']
@@ -39,11 +41,47 @@ const AddSubscriptionPage = () => {
     const navigate = useNavigate()
     const [selectedPlatform, setSelectedPlatform] = useState(null)
     const [submitted, setSubmitted] = useState(false)
+    const [loading, setLoading] = useState(false)
 
-    const handleSubmit = (e) => {
+    // Form states
+    const [customName, setCustomName] = useState('')
+    const [plan, setPlan] = useState('')
+    const [price, setPrice] = useState('')
+    const [startDate, setStartDate] = useState('')
+    const [expiryDate, setExpiryDate] = useState('')
+    const [notes, setNotes] = useState('')
+
+    const handleSubmit = async (e) => {
         e.preventDefault()
-        setSubmitted(true)
-        setTimeout(() => navigate('/dashboard'), 1500)
+        if (!selectedPlatform) return alert('Please select a platform')
+
+        setLoading(true)
+        const payload = {
+            platform: selectedPlatform.name === 'Other' ? customName : selectedPlatform.name,
+            plan,
+            price: Number(price),
+            startDate,
+            expiryDate,
+            notes,
+            icon: selectedPlatform.icon,
+            color: selectedPlatform.color
+        }
+
+        try {
+            await createSubscription(payload)
+            setSubmitted(true)
+
+            // Redirect to OTT payment page
+            if (selectedPlatform.url) {
+                window.open(selectedPlatform.url, '_blank', 'noopener,noreferrer')
+            }
+
+            setTimeout(() => navigate('/dashboard'), 2000)
+        } catch (err) {
+            console.error(err)
+            alert('Failed to add subscription')
+            setLoading(false)
+        }
     }
 
     if (submitted) {
@@ -62,7 +100,8 @@ const AddSubscriptionPage = () => {
                     <Check className="w-9 h-9 text-green-400" />
                 </motion.div>
                 <h2 className="text-2xl font-bold mb-2">Subscription Added!</h2>
-                <p className="text-sm text-gray-500">Redirecting to dashboard...</p>
+                <p className="text-sm text-gray-500 mb-4">You have been redirected to the platform to complete your payment.</p>
+                <p className="text-xs text-gray-600">Returning to dashboard in a moment...</p>
             </motion.div>
         )
     }
@@ -102,8 +141,8 @@ const AddSubscriptionPage = () => {
                             whileTap={{ scale: 0.96 }}
                             onClick={() => setSelectedPlatform(p)}
                             className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all ${selectedPlatform?.name === p.name
-                                    ? 'border-accent/50 bg-accent/10 shadow-glow-sm'
-                                    : 'border-white/5 hover:border-white/10 bg-dark-700/50'
+                                ? 'border-accent/50 bg-accent/10 shadow-glow-sm'
+                                : 'border-white/5 hover:border-white/10 bg-dark-700/50'
                                 }`}
                         >
                             <span className="text-xl">{p.icon}</span>
@@ -133,6 +172,8 @@ const AddSubscriptionPage = () => {
                                 placeholder="Enter platform name"
                                 className="cyber-input pl-10"
                                 required
+                                value={customName}
+                                onChange={e => setCustomName(e.target.value)}
                             />
                         </div>
                     </div>
@@ -143,7 +184,12 @@ const AddSubscriptionPage = () => {
                     <label className="block text-xs font-medium text-gray-400 mb-1.5">Plan Type</label>
                     <div className="relative">
                         <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600" />
-                        <select className="cyber-input pl-10 pr-10 appearance-none cursor-pointer">
+                        <select
+                            className="cyber-input pl-10 pr-10 appearance-none cursor-pointer"
+                            required
+                            value={plan}
+                            onChange={e => setPlan(e.target.value)}
+                        >
                             <option value="">Select plan</option>
                             {planTypes.map((p) => (
                                 <option key={p} value={p}>{p}</option>
@@ -164,6 +210,8 @@ const AddSubscriptionPage = () => {
                             min="0"
                             className="cyber-input pl-10"
                             required
+                            value={price}
+                            onChange={e => setPrice(e.target.value)}
                         />
                     </div>
                 </div>
@@ -178,6 +226,8 @@ const AddSubscriptionPage = () => {
                                 type="date"
                                 className="cyber-input pl-10"
                                 required
+                                value={startDate}
+                                onChange={e => setStartDate(e.target.value)}
                             />
                         </div>
                     </div>
@@ -189,6 +239,8 @@ const AddSubscriptionPage = () => {
                                 type="date"
                                 className="cyber-input pl-10"
                                 required
+                                value={expiryDate}
+                                onChange={e => setExpiryDate(e.target.value)}
                             />
                         </div>
                     </div>
@@ -201,6 +253,8 @@ const AddSubscriptionPage = () => {
                         placeholder="Any additional notes about this subscription..."
                         rows={3}
                         className="cyber-input resize-none"
+                        value={notes}
+                        onChange={e => setNotes(e.target.value)}
                     />
                 </div>
 
@@ -210,9 +264,10 @@ const AddSubscriptionPage = () => {
                         type="submit"
                         whileHover={{ scale: 1.01 }}
                         whileTap={{ scale: 0.99 }}
-                        className="cyber-btn flex-1 py-3"
+                        disabled={loading}
+                        className="cyber-btn flex-1 py-3 flex items-center justify-center gap-2"
                     >
-                        Add Subscription
+                        {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Add Subscription & Pay'}
                     </motion.button>
                     <button
                         type="button"
