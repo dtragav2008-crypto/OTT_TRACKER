@@ -2,9 +2,6 @@ import express from 'express'
 import cors from 'cors'
 import mongoose from 'mongoose'
 import dotenv from 'dotenv'
-import dns from 'dns'
-
-dns.setServers(['8.8.8.8', '8.8.4.4'])
 
 // Load .env from the root directory
 dotenv.config()
@@ -15,32 +12,35 @@ const app = express()
 const PORT = process.env.PORT || 5000
 
 // ─── Middleware ──────────────────────────────────────
-app.use(cors())
+// Allow requests from all origins (Netlify etc.)
+app.use(cors({ origin: '*' }))
 app.use(express.json())
 
 // ─── Routes ─────────────────────────────────────────
 app.use('/api/subscriptions', subscriptionRoutes)
 
 app.get('/api/health', (req, res) => {
-    res.json({
-        status: 'ok',
-        db: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+    // If DB is not connected, return 503 Service Unavailable so health checks fail gracefully
+    const dbStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+    res.status(dbStatus === 'connected' ? 200 : 503).json({
+        status: dbStatus === 'connected' ? 'ok' : 'error',
+        db: dbStatus,
+        message: dbStatus === 'disconnected' ? 'Ensure MONGODB_URI is set in Render Environment Variables' : '',
         timestamp: new Date().toISOString(),
     })
 })
 
-// ─── MongoDB Connection ─────────────────────────────
-const connectDB = async () => {
-    try {
-        await mongoose.connect(process.env.MONGODB_URI)
-        console.log('✅ Connected to MongoDB Atlas')
-        app.listen(PORT, () => {
-            console.log(`🚀 OTT Tracker API running on http://localhost:${PORT}`)
-        })
-    } catch (err) {
-        console.error('❌ MongoDB connection error:', err.message)
-        process.exit(1)
-    }
-}
+// ─── Boot Server & MongoDB ──────────────────────────
+// Start Express first so Render sees the port open and doesn't crash on DB timeout
+app.listen(PORT, () => {
+    console.log(`🚀 OTT Tracker API running on port ${PORT}`)
 
-connectDB()
+    // Connect to DB asynchronously after starting server
+    if (process.env.MONGODB_URI) {
+        mongoose.connect(process.env.MONGODB_URI)
+            .then(() => console.log('✅ Connected to MongoDB Atlas'))
+            .catch(err => console.error('❌ MongoDB connection error:', err.message))
+    } else {
+        console.error('❌ FATAL: MONGODB_URI environment variable is missing!')
+    }
+})
